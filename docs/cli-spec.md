@@ -1,4 +1,4 @@
-# CLI Spec (`hb`)
+# CLI Spec (`human-browser`)
 
 ## Global options
 
@@ -11,28 +11,28 @@
 
 ## Commands
 
-- `hb init [--host 127.0.0.1] [--port 18765] [--max-events 500] [--force]`
+- `human-browser init [--host 127.0.0.1] [--port 18765] [--max-events 500] [--force]`
   - creates config with shared token
-- `hb daemon`
+- `human-browser daemon`
   - starts local daemon
-- `hb status`
+- `human-browser status`
   - connection/session status
-- `hb tabs`
+- `human-browser tabs`
   - list tabs from extension
-- `hb use <active|tab_id>`
+- `human-browser use <active|tab_id>`
   - select target tab
-- `hb snapshot [--tab <active|tab_id>]`
+- `human-browser snapshot [--tab <active|tab_id>]`
   - returns deterministic tree with refs and `snapshot_id`
-- `hb click <ref> [--snapshot <snapshot_id>]`
-- `hb fill <ref> <value> [--snapshot <snapshot_id>]`
-- `hb keypress <key> [--tab <active|tab_id>]`
-- `hb scroll <x> <y> [--tab <active|tab_id>]`
-- `hb navigate <url> [--tab <active|tab_id>]`
-- `hb reconnect`
+- `human-browser click <ref> [--snapshot <snapshot_id>]`
+- `human-browser fill <ref> <value> [--snapshot <snapshot_id>]`
+- `human-browser keypress <key> [--tab <active|tab_id>]`
+- `human-browser scroll <x> <y> [--tab <active|tab_id>]`
+- `human-browser navigate <url> [--tab <active|tab_id>]`
+- `human-browser reconnect`
   - request bridge reconnect
-- `hb reset`
+- `human-browser reset`
   - drop session snapshot and request extension reset
-- `hb diagnose [--limit <N>]`
+- `human-browser diagnose [--limit <N>]`
   - recent events/disconnect/reconnect history
 
 ## Error model
@@ -47,7 +47,7 @@ All errors are structured:
     "message": "Snapshot mismatch...",
     "details": {},
     "recovery": {
-      "next_command": "hb snapshot",
+      "next_command": "human-browser snapshot",
       "reconnect_required": false,
       "reset_session_recommended": false
     }

@@ -142,7 +142,7 @@ function authorizeHttp(state: RuntimeState, req: IncomingMessage): void {
   const token = req.headers['x-hb-token'];
   if (typeof token !== 'string' || token !== state.config.auth.token) {
     throw new HBError('UNAUTHORIZED', 'Invalid token', undefined, {
-      next_command: 'hb init',
+      next_command: 'human-browser init',
     });
   }
 }
@@ -274,7 +274,7 @@ function onExtensionConnected(state: RuntimeState, ws: WebSocket): void {
       },
       recovery: {
         reconnect_required: true,
-        next_command: 'hb reconnect',
+        next_command: 'human-browser reconnect',
       },
     });
   });
@@ -445,7 +445,7 @@ async function executeCommand(
           ref,
           snapshot_id: snapshot.snapshot_id,
         }, {
-          next_command: 'hb snapshot',
+          next_command: 'human-browser snapshot',
         });
       }
 
@@ -478,7 +478,7 @@ async function executeCommand(
           ref,
           snapshot_id: snapshot.snapshot_id,
         }, {
-          next_command: 'hb snapshot',
+          next_command: 'human-browser snapshot',
         });
       }
 
@@ -594,7 +594,7 @@ function resolveSnapshotForAction(state: RuntimeState, args: Record<string, unkn
   const snapshot = state.latestSnapshot;
   if (!snapshot) {
     throw new HBError('NO_ACTIVE_SNAPSHOT', 'No active snapshot. Run snapshot first.', undefined, {
-      next_command: 'hb snapshot',
+      next_command: 'human-browser snapshot',
     });
   }
 
@@ -608,7 +608,7 @@ function resolveSnapshotForAction(state: RuntimeState, args: Record<string, unkn
         requested_snapshot_id: requestedSnapshotId,
       },
       {
-        next_command: 'hb snapshot',
+        next_command: 'human-browser snapshot',
       },
     );
   }
@@ -654,7 +654,7 @@ async function sendBridgeCommand(
   if (!state.extensionSocket || state.extensionSocket.readyState !== state.extensionSocket.OPEN) {
     throw new HBError('DISCONNECTED', 'Bridge disconnected before command dispatch', undefined, {
       reconnect_required: true,
-      next_command: 'hb reconnect',
+      next_command: 'human-browser reconnect',
     });
   }
 
@@ -673,7 +673,7 @@ async function sendBridgeCommand(
             timeout_ms: options.timeoutMs,
           },
           {
-            next_command: 'hb diagnose',
+            next_command: 'human-browser diagnose',
           },
         ).structured,
       );
@@ -729,7 +729,7 @@ async function ensureBridgeConnected(state: RuntimeState, timeoutMs: number, que
       reason: state.lastDisconnectReason,
     }, {
       reconnect_required: true,
-      next_command: 'hb reconnect',
+      next_command: 'human-browser reconnect',
     });
   }
 
@@ -746,7 +746,7 @@ async function ensureBridgeConnected(state: RuntimeState, timeoutMs: number, que
           },
           {
             reconnect_required: true,
-            next_command: 'hb diagnose',
+            next_command: 'human-browser diagnose',
           },
         ),
       );

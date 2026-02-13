@@ -4,7 +4,7 @@ Codex から、ユーザーのログイン済み Chrome をローカル daemon +
 
 ## 構成
 
-- `src/cli/hb.ts`: 単一CLI入口
+- `src/cli/human-browser.ts`: 単一CLI入口
 - `src/daemon/*`: 常駐ブリッジ
 - `extension/*`: Chrome拡張 (MV3)
 - `vendor/agent-browser/*`: snapshot/ref整形ロジックのvendor
@@ -14,8 +14,9 @@ Codex から、ユーザーのログイン済み Chrome をローカル daemon +
 
 ```bash
 npm install
-node src/cli/hb.ts init
-node src/cli/hb.ts daemon
+npm link
+human-browser init
+human-browser daemon
 ```
 
 `init` 後に表示される以下を拡張popupに設定:
@@ -33,12 +34,12 @@ node src/cli/hb.ts daemon
 ## 最小操作例
 
 ```bash
-node src/cli/hb.ts status
-node src/cli/hb.ts tabs
-node src/cli/hb.ts snapshot
-node src/cli/hb.ts click e1
-node src/cli/hb.ts fill e2 hello@example.com
-node src/cli/hb.ts diagnose --limit 20
+human-browser status
+human-browser tabs
+human-browser snapshot
+human-browser click e1
+human-browser fill e2 hello@example.com
+human-browser diagnose --limit 20
 ```
 
 ## 仕様

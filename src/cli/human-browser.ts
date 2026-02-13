@@ -453,7 +453,7 @@ function printHelp(): void {
       'human-browser CLI',
       '',
       'Usage:',
-      '  hb [--json] [--config <path>] [--timeout <ms>] [--queue-mode hold|fail] <command> [args]',
+      '  human-browser [--json] [--config <path>] [--timeout <ms>] [--queue-mode hold|fail] <command> [args]',
       '',
       'Commands:',
       '  init [--host 127.0.0.1] [--port 18765] [--max-events 500] [--force]',

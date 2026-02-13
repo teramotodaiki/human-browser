@@ -18,7 +18,12 @@ export async function readConfig(configPath?: string): Promise<DaemonConfig> {
   try {
     raw = await readFile(resolved, 'utf8');
   } catch {
-    throw new HBError('BAD_REQUEST', `Config not found: ${resolved}`, { config_path: resolved }, { next_command: 'hb init' });
+    throw new HBError(
+      'BAD_REQUEST',
+      `Config not found: ${resolved}`,
+      { config_path: resolved },
+      { next_command: 'human-browser init' },
+    );
   }
 
   let parsed: unknown;
@@ -80,7 +85,7 @@ export async function initConfig(options: {
 
   if (exists && !options.force) {
     throw new HBError('BAD_REQUEST', `Config already exists: ${resolved}`, { config_path: resolved }, {
-      next_command: 'hb init --force',
+      next_command: 'human-browser init --force',
     });
   }
 

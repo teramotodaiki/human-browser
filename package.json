@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test test/**/*.test.ts",
-    "daemon": "node src/cli/hb.ts daemon",
-    "cli": "node src/cli/hb.ts",
-    "dev": "node src/cli/hb.ts daemon"
+    "daemon": "node src/cli/human-browser.ts daemon",
+    "cli": "node src/cli/human-browser.ts",
+    "dev": "node src/cli/human-browser.ts daemon"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +18,6 @@
     "ws": "^8.19.0"
   },
   "bin": {
-    "hb": "src/cli/hb.ts"
+    "human-browser": "src/cli/human-browser.ts"
   }
 }
