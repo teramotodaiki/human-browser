@@ -437,67 +437,116 @@ async function executeCommand(
     }
 
     case 'click': {
-      const ref = getStringField(args, 'ref');
-      const snapshot = resolveSnapshotForAction(state, args);
-      const refData = snapshot.refs[ref];
-      if (!refData) {
-        throw new HBError('NO_SUCH_REF', `Ref not found: ${ref}`, {
-          ref,
-          snapshot_id: snapshot.snapshot_id,
-        }, {
-          next_command: 'human-browser snapshot',
+      const target = resolveActionTarget(args, 'click');
+
+      if (target.kind === 'ref') {
+        const snapshotId = getRequiredSnapshotId(args, 'click');
+        const snapshot = resolveSnapshotForAction(state, {
+          ...args,
+          snapshot_id: snapshotId,
         });
+        const refData = snapshot.refs[target.ref];
+        if (!refData) {
+          throw new HBError('NO_SUCH_REF', `Ref not found: ${target.ref}`, {
+            ref: target.ref,
+            snapshot_id: snapshot.snapshot_id,
+          }, {
+            next_command: 'human-browser snapshot',
+          });
+        }
+
+        const result = await sendBridgeCommand(
+          state,
+          'click',
+          {
+            tab_id: snapshot.tab_id,
+            selector: refData.selector,
+          },
+          options,
+        );
+
+        return {
+          snapshot_id: snapshot.snapshot_id,
+          tab_id: snapshot.tab_id,
+          ref: target.ref,
+          selector: refData.selector,
+          result,
+        };
       }
 
+      const tabId = resolveTabForAction(state, args);
       const result = await sendBridgeCommand(
         state,
         'click',
         {
-          tab_id: snapshot.tab_id,
-          selector: refData.selector,
+          tab_id: tabId,
+          selector: target.selector,
         },
         options,
       );
 
       return {
-        snapshot_id: snapshot.snapshot_id,
-        tab_id: snapshot.tab_id,
-        ref,
-        selector: refData.selector,
+        tab_id: tabId,
+        selector: target.selector,
         result,
       };
     }
 
     case 'fill': {
-      const ref = getStringField(args, 'ref');
       const value = getStringField(args, 'value');
-      const snapshot = resolveSnapshotForAction(state, args);
-      const refData = snapshot.refs[ref];
-      if (!refData) {
-        throw new HBError('NO_SUCH_REF', `Ref not found: ${ref}`, {
-          ref,
-          snapshot_id: snapshot.snapshot_id,
-        }, {
-          next_command: 'human-browser snapshot',
+      const target = resolveActionTarget(args, 'fill');
+
+      if (target.kind === 'ref') {
+        const snapshotId = getRequiredSnapshotId(args, 'fill');
+        const snapshot = resolveSnapshotForAction(state, {
+          ...args,
+          snapshot_id: snapshotId,
         });
+        const refData = snapshot.refs[target.ref];
+        if (!refData) {
+          throw new HBError('NO_SUCH_REF', `Ref not found: ${target.ref}`, {
+            ref: target.ref,
+            snapshot_id: snapshot.snapshot_id,
+          }, {
+            next_command: 'human-browser snapshot',
+          });
+        }
+
+        const result = await sendBridgeCommand(
+          state,
+          'fill',
+          {
+            tab_id: snapshot.tab_id,
+            selector: refData.selector,
+            value,
+          },
+          options,
+        );
+
+        return {
+          snapshot_id: snapshot.snapshot_id,
+          tab_id: snapshot.tab_id,
+          ref: target.ref,
+          selector: refData.selector,
+          result,
+        };
       }
 
+      const tabId = resolveTabForAction(state, args);
       const result = await sendBridgeCommand(
         state,
         'fill',
         {
-          tab_id: snapshot.tab_id,
-          selector: refData.selector,
+          tab_id: tabId,
+          selector: target.selector,
           value,
         },
         options,
       );
 
       return {
-        snapshot_id: snapshot.snapshot_id,
-        tab_id: snapshot.tab_id,
-        ref,
-        selector: refData.selector,
+        tab_id: tabId,
+        selector: target.selector,
         result,
       };
     }
@@ -641,6 +690,62 @@ function resolveTabForAction(state: RuntimeState, args: Record<string, unknown>)
   }
 
   return 'active';
+}
+
+function resolveActionTarget(
+  args: Record<string, unknown>,
+  command: 'click' | 'fill',
+): { kind: 'ref'; ref: string } | { kind: 'selector'; selector: string } {
+  const refRaw = typeof args.ref === 'string' ? args.ref : undefined;
+  const selectorRaw = typeof args.selector === 'string' ? args.selector : undefined;
+
+  if (refRaw && selectorRaw) {
+    throw new HBError('BAD_REQUEST', `${command} supports either args.ref or args.selector, not both`);
+  }
+
+  if (refRaw) {
+    const ref = parseRefArg(refRaw);
+    if (!ref) {
+      throw new HBError('BAD_REQUEST', `Invalid ref format for ${command}: ${refRaw}`);
+    }
+    return { kind: 'ref', ref };
+  }
+
+  if (selectorRaw) {
+    const selectorAsRef = parseRefArg(selectorRaw);
+    if (selectorAsRef) {
+      return { kind: 'ref', ref: selectorAsRef };
+    }
+    return { kind: 'selector', selector: selectorRaw };
+  }
+
+  throw new HBError('BAD_REQUEST', `${command} requires args.ref or args.selector`);
+}
+
+function getRequiredSnapshotId(args: Record<string, unknown>, command: 'click' | 'fill'): string {
+  const snapshotId = args.snapshot_id;
+  if (typeof snapshotId !== 'string' || snapshotId.length === 0) {
+    throw new HBError('BAD_REQUEST', `${command} with ref requires args.snapshot_id`, undefined, {
+      next_command: 'human-browser snapshot',
+    });
+  }
+  return snapshotId;
+}
+
+function parseRefArg(raw: string): string | null {
+  if (/^@e\d+$/.test(raw)) {
+    return raw.slice(1);
+  }
+
+  if (/^ref=e\d+$/.test(raw)) {
+    return raw.slice(4);
+  }
+
+  if (/^e\d+$/.test(raw)) {
+    return raw;
+  }
+
+  return null;
 }
 
 async function sendBridgeCommand(

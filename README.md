@@ -37,8 +37,11 @@ human-browser daemon
 human-browser status
 human-browser tabs
 human-browser snapshot
-human-browser click e1
-human-browser fill e2 hello@example.com
+human-browser click '#login'
+human-browser fill '#email' hello@example.com
+# refs (@e1/ref=e1/e1) で操作する場合は --snapshot が必須
+human-browser click @e1 --snapshot <snapshot_id>
+human-browser fill @e2 hello@example.com --snapshot <snapshot_id>
 human-browser diagnose --limit 20
 ```
 

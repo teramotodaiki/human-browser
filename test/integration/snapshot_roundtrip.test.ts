@@ -29,7 +29,7 @@ function getFreePort(): Promise<number> {
   });
 }
 
-async function callDaemon(config: DaemonConfig, command: string, args: Record<string, unknown>) {
+async function callDaemonRaw(config: DaemonConfig, command: string, args: Record<string, unknown>) {
   const response = await fetch(`http://${config.daemon.host}:${config.daemon.port}/v1/command`, {
     method: 'POST',
     headers: {
@@ -50,10 +50,14 @@ async function callDaemon(config: DaemonConfig, command: string, args: Record<st
     error?: { code: string; message: string };
   };
 
+  return payload;
+}
+
+async function callDaemon(config: DaemonConfig, command: string, args: Record<string, unknown>) {
+  const payload = await callDaemonRaw(config, command, args);
   if (!payload.ok) {
     throw new Error(`${payload.error?.code}: ${payload.error?.message}`);
   }
-
   return payload.data ?? {};
 }
 
@@ -215,6 +219,22 @@ test('snapshot -> click -> fill roundtrip works via daemon/bridge protocol', asy
       snapshot_id: snapshotId,
     });
 
+    const refWithoutSnapshot = await callDaemonRaw(config, 'click', {
+      ref: 'e1',
+    });
+    assert.equal(refWithoutSnapshot.ok, false);
+    assert.equal(refWithoutSnapshot.error?.code, 'BAD_REQUEST');
+    assert.match(refWithoutSnapshot.error?.message ?? '', /requires args\.snapshot_id/);
+
+    await callDaemon(config, 'click', {
+      selector: '#login',
+    });
+
+    await callDaemon(config, 'fill', {
+      selector: '#email',
+      value: 'bob@example.com',
+    });
+
     const clicked = dom.window.document.querySelector('#login')?.getAttribute('data-clicked');
     assert.equal(clicked, '1');
 
@@ -222,7 +242,7 @@ test('snapshot -> click -> fill roundtrip works via daemon/bridge protocol', asy
     if (!(email instanceof dom.window.HTMLInputElement)) {
       throw new Error('email input missing');
     }
-    assert.equal(email.value, 'alice@example.com');
+    assert.equal(email.value, 'bob@example.com');
   } finally {
     ws.close();
     await daemon.close();

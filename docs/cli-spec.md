@@ -23,8 +23,9 @@
   - select target tab
 - `human-browser snapshot [--tab <active|tab_id>]`
   - returns deterministic tree with refs and `snapshot_id`
-- `human-browser click <ref> [--snapshot <snapshot_id>]`
-- `human-browser fill <ref> <value> [--snapshot <snapshot_id>]`
+- `human-browser click <selector|@ref> [--snapshot <snapshot_id>]`
+- `human-browser fill <selector|@ref> <value> [--snapshot <snapshot_id>]`
+  - ref (`@eN`/`ref=eN`/`eN`) を使う場合は `--snapshot` 必須
 - `human-browser keypress <key> [--tab <active|tab_id>]`
 - `human-browser scroll <x> <y> [--tab <active|tab_id>]`
 - `human-browser navigate <url> [--tab <active|tab_id>]`

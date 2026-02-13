@@ -287,32 +287,63 @@ function toDaemonRequest(
       };
     }
     case 'click': {
-      const ref = args[0];
-      if (!ref) {
-        throw new HBError('BAD_REQUEST', 'click requires <ref>');
+      const selectorOrRef = args[0];
+      if (!selectorOrRef) {
+        throw new HBError('BAD_REQUEST', 'click requires <selector|@ref>');
       }
       const parsed = parseNamedFlags(args.slice(1), ['--snapshot']);
+      const ref = parseRefArg(selectorOrRef);
+
+      if (ref) {
+        const snapshotId = parsed['--snapshot'];
+        if (!snapshotId) {
+          throw new HBError('BAD_REQUEST', 'click with ref requires --snapshot <snapshot_id>');
+        }
+        return {
+          command,
+          args: {
+            ref,
+            snapshot_id: snapshotId,
+          },
+        };
+      }
+
       return {
         command,
         args: {
-          ref,
-          snapshot_id: parsed['--snapshot'],
+          selector: selectorOrRef,
         },
       };
     }
     case 'fill': {
-      const ref = args[0];
+      const selectorOrRef = args[0];
       const value = args[1];
-      if (!ref || value === undefined) {
-        throw new HBError('BAD_REQUEST', 'fill requires <ref> <value>');
+      if (!selectorOrRef || value === undefined) {
+        throw new HBError('BAD_REQUEST', 'fill requires <selector|@ref> <value>');
       }
       const parsed = parseNamedFlags(args.slice(2), ['--snapshot']);
+      const ref = parseRefArg(selectorOrRef);
+
+      if (ref) {
+        const snapshotId = parsed['--snapshot'];
+        if (!snapshotId) {
+          throw new HBError('BAD_REQUEST', 'fill with ref requires --snapshot <snapshot_id>');
+        }
+        return {
+          command,
+          args: {
+            ref,
+            value,
+            snapshot_id: snapshotId,
+          },
+        };
+      }
+
       return {
         command,
         args: {
-          ref,
+          selector: selectorOrRef,
           value,
-          snapshot_id: parsed['--snapshot'],
         },
       };
     }
@@ -415,6 +446,22 @@ function parseTab(raw: string): number | 'active' {
   return numeric;
 }
 
+function parseRefArg(raw: string): string | null {
+  if (/^@e\d+$/.test(raw)) {
+    return raw.slice(1);
+  }
+
+  if (/^ref=e\d+$/.test(raw)) {
+    return raw.slice(4);
+  }
+
+  if (/^e\d+$/.test(raw)) {
+    return raw;
+  }
+
+  return null;
+}
+
 async function callDaemon(
   config: DaemonConfig,
   command: string,
@@ -483,8 +530,8 @@ function printHelp(): void {
       '  tabs',
       '  use <active|tab_id>',
       '  snapshot [--tab <active|tab_id>]',
-      '  click <ref> [--snapshot <snapshot_id>]',
-      '  fill <ref> <value> [--snapshot <snapshot_id>]',
+      '  click <selector|@ref> [--snapshot <snapshot_id>]',
+      '  fill <selector|@ref> <value> [--snapshot <snapshot_id>]',
       '  keypress <key> [--tab <active|tab_id>]',
       '  scroll <x> <y> [--tab <active|tab_id>]',
       '  navigate <url> [--tab <active|tab_id>]',
