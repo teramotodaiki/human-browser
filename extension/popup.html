@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Human Browser Bridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Human Browser Bridge</h1>
+
+      <section class="panel">
+        <h2>接続状態</h2>
+        <dl>
+          <div><dt>Daemon</dt><dd id="daemon-connected">-</dd></div>
+          <div><dt>最終Ping</dt><dd id="last-ping">-</dd></div>
+          <div><dt>再試行回数</dt><dd id="retry-count">-</dd></div>
+          <div><dt>切断理由</dt><dd id="disconnect-reason">-</dd></div>
+          <div><dt>対象tab_id</dt><dd id="target-tab">-</dd></div>
+          <div><dt>Debugger attach</dt><dd id="target-attached">-</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <h2>設定</h2>
+        <label>
+          Daemon WS URL
+          <input id="daemon-ws-url" type="text" placeholder="ws://127.0.0.1:18765/bridge" />
+        </label>
+        <label>
+          Shared Token
+          <input id="daemon-token" type="password" placeholder="token" />
+        </label>
+
+        <div class="row">
+          <button id="save-config" type="button">Save</button>
+          <button id="reconnect" type="button">Reconnect</button>
+          <button id="reset-session" type="button">Reset Session</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>最後のエラー</h2>
+        <pre id="last-error">-</pre>
+      </section>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
