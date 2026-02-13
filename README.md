@@ -24,6 +24,9 @@ human-browser daemon
 - `extension_ws_url` 例: `ws://127.0.0.1:18765/bridge`
 - `token` (`init` はデフォルトで token を隠すため、`human-browser init --show-token` で表示)
 
+注意:
+- `human-browser init --force` は既存configの token を維持します（稼働中daemonとの token 不整合を避けるため）。
+
 ## Chrome拡張の読み込み
 
 1. `chrome://extensions` を開く

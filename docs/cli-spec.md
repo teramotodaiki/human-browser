@@ -13,6 +13,7 @@
 
 - `human-browser init [--host 127.0.0.1] [--port 18765] [--max-events 500] [--force] [--show-token]`
   - creates config with shared token
+  - `--force` で再初期化しても既存 token は維持される（daemon との token 不整合防止）
 - `human-browser ws [--show-token]`
   - prints websocket endpoint (`token` is hidden unless `--show-token` is specified)
 - `human-browser daemon`

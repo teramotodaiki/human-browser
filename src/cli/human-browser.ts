@@ -494,19 +494,34 @@ async function callDaemon(
   args: Record<string, unknown>,
   options: GlobalOptions,
 ): Promise<Record<string, unknown>> {
-  const response = await fetch(`http://${config.daemon.host}:${config.daemon.port}/v1/command`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-hb-token': config.auth.token,
-    },
-    body: JSON.stringify({
-      command,
-      args,
-      queue_mode: options.queueMode,
-      timeout_ms: options.timeoutMs,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`http://${config.daemon.host}:${config.daemon.port}/v1/command`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-hb-token': config.auth.token,
+      },
+      body: JSON.stringify({
+        command,
+        args,
+        queue_mode: options.queueMode,
+        timeout_ms: options.timeoutMs,
+      }),
+    });
+  } catch (error) {
+    throw new HBError(
+      'DISCONNECTED',
+      'Daemon is not reachable',
+      {
+        daemon_http_url: `http://${config.daemon.host}:${config.daemon.port}`,
+        cause: error instanceof Error ? error.message : String(error),
+      },
+      {
+        next_command: 'human-browser daemon',
+      },
+    );
+  }
 
   let payload: DaemonApiResponse;
   try {

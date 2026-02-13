@@ -94,9 +94,13 @@ export async function initConfig(options: {
   }
 
   let exists = false;
+  let reusedToken: string | null = null;
   try {
-    await readFile(resolved, 'utf8');
+    const existingRaw = await readFile(resolved, 'utf8');
     exists = true;
+    if (options.force) {
+      reusedToken = extractReusableToken(existingRaw);
+    }
   } catch {
     exists = false;
   }
@@ -113,7 +117,7 @@ export async function initConfig(options: {
       port: options.port,
     },
     auth: {
-      token: randomUUID().replaceAll('-', ''),
+      token: reusedToken ?? randomUUID().replaceAll('-', ''),
     },
     diagnostics: {
       max_events: options.maxEvents,
@@ -131,4 +135,29 @@ export async function initConfig(options: {
     config,
     alreadyExisted: exists,
   };
+}
+
+function extractReusableToken(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  const token = (parsed as Record<string, unknown>).auth;
+  if (!token || typeof token !== 'object') {
+    return null;
+  }
+
+  const value = (token as Record<string, unknown>).token;
+  if (typeof value !== 'string' || value.length < 24) {
+    return null;
+  }
+
+  return value;
 }

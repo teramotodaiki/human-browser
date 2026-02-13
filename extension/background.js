@@ -378,6 +378,7 @@ function connectSocket(options = { force: false }) {
     state.daemon.connected = false;
     updateActionIcon();
     state.daemon.lastDisconnectReason = event.reason || `close_code_${event.code}`;
+    void resetSession();
     scheduleReconnect();
   };
 }
@@ -685,16 +686,19 @@ async function evaluateScript(tabId, scriptBody, input) {
 }
 
 async function resetSession() {
-  if (state.target.attached && typeof state.target.tabId === 'number') {
+  const attachedTabId = state.target.attached && typeof state.target.tabId === 'number'
+    ? state.target.tabId
+    : null;
+  state.target.attached = false;
+  state.target.tabId = null;
+
+  if (attachedTabId !== null) {
     try {
-      await chrome.debugger.detach({ tabId: state.target.tabId });
+      await chrome.debugger.detach({ tabId: attachedTabId });
     } catch {
       // Ignore detach errors.
     }
   }
-
-  state.target.attached = false;
-  state.target.tabId = null;
 }
 
 function toStructuredError(error) {
