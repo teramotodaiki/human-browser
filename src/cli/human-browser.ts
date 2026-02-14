@@ -40,6 +40,19 @@ function parseGlobalArgs(argv: string[]): Parsed {
       continue;
     }
 
+    if (token === '--help') {
+      return {
+        command: 'help',
+        args: [],
+        options: {
+          json,
+          configPath,
+          timeoutMs,
+          queueMode,
+        },
+      };
+    }
+
     if (token === '--config') {
       const value = args.shift();
       if (!value) {
@@ -1132,7 +1145,7 @@ function printHelp(): void {
       'human-browser CLI',
       '',
       'Usage:',
-      '  human-browser [--json] [--config <path>] [--timeout <ms>] [--queue-mode hold|fail] <command> [args]',
+      '  human-browser [--help] [--json] [--config <path>] [--timeout <ms>] [--queue-mode hold|fail] <command> [args]',
       '',
       'Commands:',
       '  ws [--show-token]',
