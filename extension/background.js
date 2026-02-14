@@ -3,6 +3,7 @@ const RETRY_MAX_MS = 30000;
 const DAEMON_ALLOWED_PROTOCOL = 'ws:';
 const DAEMON_ALLOWED_HOST = '127.0.0.1';
 const DAEMON_ALLOWED_PATH = '/bridge';
+const MAX_MONITOR_EVENTS = 1000;
 
 const ACTION_ICON_PATHS = {
   connected: {
@@ -33,6 +34,17 @@ const state = {
   target: {
     tabId: null,
     attached: false,
+  },
+  monitor: {
+    network: {
+      enabled: false,
+      events: [],
+      byRequestId: {},
+    },
+    console: {
+      enabled: false,
+      events: [],
+    },
   },
   lastError: null,
 };
@@ -462,6 +474,175 @@ const NAVIGATE_SCRIPT = `(input) => {
   };
 }`;
 
+const HOVER_POINT_SCRIPT = `(input) => {
+  const el = document.querySelector(input.selector);
+  if (!el) {
+    return {
+      ok: false,
+      error: {
+        code: 'NO_MATCH',
+        message: 'Element not found for selector',
+        details: { selector: input.selector },
+      },
+    };
+  }
+
+  el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) {
+    return {
+      ok: false,
+      error: {
+        code: 'NOT_VISIBLE',
+        message: 'Element is not visible',
+        details: { selector: input.selector },
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}`;
+
+const TEXT_SCRIPT = `(input) => {
+  const el = document.querySelector(input.selector);
+  if (!el) {
+    return {
+      ok: false,
+      error: {
+        code: 'NO_MATCH',
+        message: 'Element not found for selector',
+        details: { selector: input.selector },
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    text: (el.textContent || '').trim(),
+  };
+}`;
+
+const HTML_SCRIPT = `(input) => {
+  if (!input.selector) {
+    return {
+      ok: true,
+      html: document.documentElement.outerHTML,
+    };
+  }
+
+  const el = document.querySelector(input.selector);
+  if (!el) {
+    return {
+      ok: false,
+      error: {
+        code: 'NO_MATCH',
+        message: 'Element not found for selector',
+        details: { selector: input.selector },
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    html: el.innerHTML,
+  };
+}`;
+
+const WAIT_SCRIPT = `(input) => {
+  const timeoutMs = Number.isFinite(input.timeout_ms) && input.timeout_ms > 0 ? input.timeout_ms : 10000;
+  const started = Date.now();
+  const selector = typeof input.selector === 'string' ? input.selector : null;
+  const text = typeof input.text === 'string' ? input.text : null;
+  const expression = typeof input.expression === 'string' ? input.expression : null;
+  const loadState = typeof input.load_state === 'string' ? input.load_state : null;
+  const sleepMs = Number.isFinite(input.sleep_ms) && input.sleep_ms > 0 ? input.sleep_ms : null;
+  const urlPattern = typeof input.url_pattern === 'string' ? input.url_pattern : null;
+
+  const isVisible = (el) => {
+    if (!(el instanceof Element)) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+
+  const escapeRegExp = (value) => value.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&');
+  const globToRegExp = (pattern) => new RegExp('^' + pattern.split('*').map(escapeRegExp).join('.*') + '$');
+
+  const matchesLoadState = () => {
+    if (!loadState) return false;
+    if (loadState === 'load') return document.readyState === 'complete';
+    if (loadState === 'domcontentloaded') return document.readyState !== 'loading';
+    if (loadState === 'networkidle') return document.readyState === 'complete';
+    return false;
+  };
+
+  const isConditionMet = () => {
+    if (selector) {
+      const el = document.querySelector(selector);
+      return isVisible(el);
+    }
+    if (text) {
+      return (document.body?.innerText || '').includes(text);
+    }
+    if (urlPattern) {
+      return globToRegExp(urlPattern).test(window.location.href);
+    }
+    if (expression) {
+      try {
+        // eslint-disable-next-line no-eval
+        return Boolean(eval(expression));
+      } catch {
+        return false;
+      }
+    }
+    if (loadState) {
+      return matchesLoadState();
+    }
+    return false;
+  };
+
+  return new Promise((resolve) => {
+    if (sleepMs !== null) {
+      setTimeout(() => resolve({ ok: true, waited: true, sleep_ms: sleepMs }), sleepMs);
+      return;
+    }
+
+    const tick = () => {
+      if (isConditionMet()) {
+        resolve({ ok: true, waited: true });
+        return;
+      }
+
+      if (Date.now() - started >= timeoutMs) {
+        resolve({
+          ok: false,
+          error: {
+            code: 'WAIT_TIMEOUT',
+            message: 'Timed out while waiting for condition',
+            details: {
+              timeout_ms: timeoutMs,
+              selector,
+              text,
+              url_pattern: urlPattern,
+              load_state: loadState,
+            },
+          },
+        });
+        return;
+      }
+
+      setTimeout(tick, 100);
+    };
+
+    tick();
+  });
+}`;
+
 chrome.runtime.onInstalled.addListener(() => {
   void bootstrap();
 });
@@ -471,6 +652,9 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 void bootstrap();
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  handleDebuggerEvent(source, method, params);
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   void (async () => {
@@ -810,6 +994,330 @@ async function runCommand(command, payload) {
       return response;
     }
 
+    case 'open': {
+      const tabId = await resolveTabId(payload.tab_id);
+      const url = String(payload.url);
+      await chrome.tabs.update(tabId, { url });
+      return {
+        ok: true,
+        tab_id: tabId,
+        url,
+      };
+    }
+
+    case 'close': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await chrome.tabs.remove(tabId);
+      if (state.target.attached && state.target.tabId === tabId) {
+        state.target.attached = false;
+        state.target.tabId = null;
+      }
+      return {
+        ok: true,
+        tab_id: tabId,
+      };
+    }
+
+    case 'hover': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const point = await evaluateScript(tabId, HOVER_POINT_SCRIPT, {
+        selector: String(payload.selector),
+      });
+      if (!point?.ok) {
+        throw point?.error || new Error('hover failed');
+      }
+      await chrome.debugger.sendCommand(
+        { tabId },
+        'Input.dispatchMouseEvent',
+        {
+          type: 'mouseMoved',
+          x: Number(point.x),
+          y: Number(point.y),
+        },
+      );
+      return {
+        ok: true,
+        x: point.x,
+        y: point.y,
+      };
+    }
+
+    case 'eval': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const result = await evaluateRaw(tabId, String(payload.script));
+      return {
+        ok: true,
+        result,
+      };
+    }
+
+    case 'text': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const response = await evaluateScript(tabId, TEXT_SCRIPT, {
+        selector: String(payload.selector),
+      });
+      if (!response?.ok) {
+        throw response?.error || new Error('text failed');
+      }
+      return response;
+    }
+
+    case 'html': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const response = await evaluateScript(tabId, HTML_SCRIPT, {
+        selector: typeof payload.selector === 'string' ? payload.selector : undefined,
+      });
+      if (!response?.ok) {
+        throw response?.error || new Error('html failed');
+      }
+      return response;
+    }
+
+    case 'wait': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const response = await evaluateScript(tabId, WAIT_SCRIPT, {
+        selector: typeof payload.selector === 'string' ? payload.selector : undefined,
+        sleep_ms: typeof payload.sleep_ms === 'number' ? payload.sleep_ms : undefined,
+        timeout_ms: typeof payload.timeout_ms === 'number' ? payload.timeout_ms : undefined,
+        text: typeof payload.text === 'string' ? payload.text : undefined,
+        url_pattern: typeof payload.url_pattern === 'string' ? payload.url_pattern : undefined,
+        load_state: typeof payload.load_state === 'string' ? payload.load_state : undefined,
+        expression: typeof payload.expression === 'string' ? payload.expression : undefined,
+      });
+      if (!response?.ok) {
+        throw response?.error || new Error('wait failed');
+      }
+      return response;
+    }
+
+    case 'screenshot': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Page.enable');
+
+      const options = {
+        format: 'png',
+      };
+
+      if (Boolean(payload.full_page)) {
+        const metrics = await chrome.debugger.sendCommand({ tabId }, 'Page.getLayoutMetrics');
+        const contentSize = metrics?.contentSize;
+        if (!contentSize) {
+          throw {
+            code: 'SCREENSHOT_FAILED',
+            message: 'Page.getLayoutMetrics returned no contentSize',
+          };
+        }
+        const capture = await chrome.debugger.sendCommand(
+          { tabId },
+          'Page.captureScreenshot',
+          {
+            ...options,
+            captureBeyondViewport: true,
+            fromSurface: true,
+            clip: {
+              x: 0,
+              y: 0,
+              width: Number(contentSize.width),
+              height: Number(contentSize.height),
+              scale: 1,
+            },
+          },
+        );
+        return {
+          ok: true,
+          format: 'png',
+          data_base64: capture.data,
+        };
+      }
+
+      const capture = await chrome.debugger.sendCommand(
+        { tabId },
+        'Page.captureScreenshot',
+        {
+          ...options,
+          fromSurface: true,
+        },
+      );
+
+      return {
+        ok: true,
+        format: 'png',
+        data_base64: capture.data,
+      };
+    }
+
+    case 'pdf': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Page.enable');
+      const printed = await chrome.debugger.sendCommand({ tabId }, 'Page.printToPDF', {
+        printBackground: true,
+      });
+      return {
+        ok: true,
+        data_base64: printed.data,
+      };
+    }
+
+    case 'cookies_get': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const url = typeof payload.url === 'string' ? payload.url : await getTabUrl(tabId);
+      const result = await chrome.debugger.sendCommand({ tabId }, 'Network.getCookies', {
+        urls: [url],
+      });
+      return {
+        ok: true,
+        cookies: result.cookies || [],
+      };
+    }
+
+    case 'cookies_set': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const name = String(payload.name);
+      const value = String(payload.value);
+      const url = typeof payload.url === 'string' ? payload.url : await getTabUrl(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Network.setCookies', {
+        cookies: [{ name, value, url }],
+      });
+      return {
+        ok: true,
+        name,
+        url,
+      };
+    }
+
+    case 'cookies_delete': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const name = String(payload.name);
+      const url = typeof payload.url === 'string' ? payload.url : await getTabUrl(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Network.deleteCookies', {
+        name,
+        url,
+      });
+      return {
+        ok: true,
+        name,
+        url,
+      };
+    }
+
+    case 'cookies_clear': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      const currentUrl = await getTabUrl(tabId);
+      const result = await chrome.debugger.sendCommand({ tabId }, 'Network.getCookies', {
+        urls: [currentUrl],
+      });
+      const cookies = Array.isArray(result.cookies) ? result.cookies : [];
+      let cleared = 0;
+      for (const cookie of cookies) {
+        try {
+          await chrome.debugger.sendCommand({ tabId }, 'Network.deleteCookies', {
+            name: cookie.name,
+            domain: cookie.domain,
+            path: cookie.path,
+          });
+          cleared += 1;
+        } catch {
+          // Ignore per-cookie deletion errors so one bad cookie does not block all deletions.
+        }
+      }
+      return {
+        ok: true,
+        cleared,
+      };
+    }
+
+    case 'network_start': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+      state.monitor.network.enabled = true;
+      return {
+        ok: true,
+        tab_id: tabId,
+      };
+    }
+
+    case 'network_stop': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      state.monitor.network.enabled = false;
+      return {
+        ok: true,
+        tab_id: tabId,
+      };
+    }
+
+    case 'network_dump': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+      state.monitor.network.enabled = true;
+
+      const filter = typeof payload.filter === 'string' ? payload.filter.toLowerCase() : null;
+      const events = filter
+        ? state.monitor.network.events.filter((entry) => String(entry.url || '').toLowerCase().includes(filter))
+        : state.monitor.network.events;
+      const response = {
+        ok: true,
+        events,
+      };
+
+      if (payload.clear === true) {
+        state.monitor.network.events = [];
+        state.monitor.network.byRequestId = {};
+      }
+
+      return response;
+    }
+
+    case 'console_start': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+      state.monitor.console.enabled = true;
+      return {
+        ok: true,
+        tab_id: tabId,
+      };
+    }
+
+    case 'console_stop': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      state.monitor.console.enabled = false;
+      return {
+        ok: true,
+        tab_id: tabId,
+      };
+    }
+
+    case 'console_dump': {
+      const tabId = await resolveTabId(payload.tab_id);
+      await ensureAttached(tabId);
+      await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+      state.monitor.console.enabled = true;
+
+      const messages = state.monitor.console.events;
+      if (payload.clear === true) {
+        state.monitor.console.events = [];
+      }
+      return {
+        ok: true,
+        messages,
+      };
+    }
+
     case 'reconnect': {
       connectSocket({ force: true });
       return { ok: true, requested: true };
@@ -861,7 +1369,13 @@ async function resolveTabId(target) {
 
 async function ensureAttached(tabId) {
   if (state.target.attached && state.target.tabId === tabId) {
-    return;
+    try {
+      await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+      return;
+    } catch {
+      state.target.attached = false;
+      state.target.tabId = null;
+    }
   }
 
   if (state.target.attached && typeof state.target.tabId === 'number') {
@@ -932,6 +1446,8 @@ async function resetSession() {
     : null;
   state.target.attached = false;
   state.target.tabId = null;
+  state.monitor.network.enabled = false;
+  state.monitor.console.enabled = false;
 
   if (attachedTabId !== null) {
     try {
@@ -940,6 +1456,157 @@ async function resetSession() {
       // Ignore detach errors.
     }
   }
+}
+
+function handleDebuggerEvent(source, method, params) {
+  if (!source || typeof source.tabId !== 'number') {
+    return;
+  }
+
+  const tabId = source.tabId;
+  if (state.target.tabId !== tabId) {
+    return;
+  }
+
+  if (state.monitor.network.enabled) {
+    if (method === 'Network.requestWillBeSent') {
+      const requestId = String(params?.requestId ?? '');
+      if (!requestId) {
+        return;
+      }
+      state.monitor.network.byRequestId[requestId] = {
+        request_id: requestId,
+        url: String(params?.request?.url ?? ''),
+        method: String(params?.request?.method ?? ''),
+        resource_type: String(params?.type ?? ''),
+        started_at: Date.now(),
+      };
+      return;
+    }
+
+    if (method === 'Network.responseReceived') {
+      const requestId = String(params?.requestId ?? '');
+      if (!requestId) {
+        return;
+      }
+      const entry = state.monitor.network.byRequestId[requestId] || {};
+      const nextEntry = {
+        request_id: requestId,
+        url: String(params?.response?.url ?? entry.url ?? ''),
+        method: String(entry.method ?? ''),
+        resource_type: String(params?.type ?? entry.resource_type ?? ''),
+        status: Number(params?.response?.status ?? 0),
+        status_text: String(params?.response?.statusText ?? ''),
+        mime_type: String(params?.response?.mimeType ?? ''),
+        timestamp: Date.now(),
+      };
+      pushMonitorEvent(state.monitor.network.events, nextEntry);
+      delete state.monitor.network.byRequestId[requestId];
+      return;
+    }
+  }
+
+  if (state.monitor.console.enabled) {
+    if (method === 'Runtime.consoleAPICalled') {
+      const args = Array.isArray(params?.args) ? params.args : [];
+      const text = args.map((entry) => stringifyRemoteValue(entry)).join(' ');
+      pushMonitorEvent(state.monitor.console.events, {
+        type: String(params?.type ?? 'log'),
+        text,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    if (method === 'Runtime.exceptionThrown') {
+      const details = params?.exceptionDetails || {};
+      const text = String(details.text || details.exception?.description || 'Uncaught exception');
+      pushMonitorEvent(state.monitor.console.events, {
+        type: 'error',
+        text,
+        timestamp: Date.now(),
+      });
+    }
+  }
+}
+
+function stringifyRemoteValue(input) {
+  if (!input || typeof input !== 'object') {
+    return String(input ?? '');
+  }
+
+  if (typeof input.value === 'string' || typeof input.value === 'number' || typeof input.value === 'boolean') {
+    return String(input.value);
+  }
+
+  if (input.value === null) {
+    return 'null';
+  }
+
+  if (typeof input.description === 'string' && input.description.length > 0) {
+    return input.description;
+  }
+
+  return String(input.type ?? 'unknown');
+}
+
+function pushMonitorEvent(bucket, item) {
+  bucket.push(item);
+  if (bucket.length > MAX_MONITOR_EVENTS) {
+    bucket.splice(0, bucket.length - MAX_MONITOR_EVENTS);
+  }
+}
+
+async function evaluateRaw(tabId, expression) {
+  let response;
+  try {
+    response = await chrome.debugger.sendCommand(
+      { tabId },
+      'Runtime.evaluate',
+      {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        userGesture: true,
+      },
+    );
+  } catch (error) {
+    throw {
+      code: 'CDP_EVALUATE_FAILED',
+      message: error instanceof Error ? error.message : String(error),
+      details: {
+        tab_id: tabId,
+      },
+    };
+  }
+
+  if (response?.exceptionDetails) {
+    throw {
+      code: 'SCRIPT_EXCEPTION',
+      message: 'Page script execution failed',
+      details: {
+        tab_id: tabId,
+        text: response.exceptionDetails.text,
+      },
+    };
+  }
+
+  return response?.result?.value;
+}
+
+async function getTabUrl(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const url = String(tab.url || '').trim();
+  if (!url) {
+    throw {
+      code: 'NO_TAB_URL',
+      message: 'Could not resolve tab URL',
+      details: {
+        tab_id: tabId,
+      },
+    };
+  }
+  return url;
 }
 
 function toStructuredError(error) {

@@ -84,5 +84,24 @@ Failure:
 - `keypress`: `{ tab_id: number | "active", key: string }`
 - `scroll`: `{ tab_id: number | "active", x: number, y: number }`
 - `navigate`: `{ tab_id: number | "active", url: string }`
+- `open`: `{ tab_id: number | "active", url: string }`
+- `close`: `{ tab_id: number | "active" }`
+- `hover`: `{ tab_id: number | "active", selector: string }`
+- `eval`: `{ tab_id: number | "active", script: string }`
+- `text`: `{ tab_id: number | "active", selector: string }`
+- `html`: `{ tab_id: number | "active", selector?: string }`
+- `wait`: `{ tab_id: number | "active", selector?: string, sleep_ms?: number, timeout_ms?: number, text?: string, url_pattern?: string, load_state?: string, expression?: string }`
+- `screenshot`: `{ tab_id: number | "active", full_page?: boolean }`
+- `pdf`: `{ tab_id: number | "active" }`
+- `cookies_get`: `{ tab_id: number | "active", url?: string }`
+- `cookies_set`: `{ tab_id: number | "active", name: string, value: string, url?: string }`
+- `cookies_delete`: `{ tab_id: number | "active", name: string, url?: string }`
+- `cookies_clear`: `{ tab_id: number | "active" }`
+- `network_start`: `{ tab_id: number | "active" }`
+- `network_stop`: `{ tab_id: number | "active" }`
+- `network_dump`: `{ tab_id: number | "active", filter?: string, clear?: boolean }`
+- `console_start`: `{ tab_id: number | "active" }`
+- `console_stop`: `{ tab_id: number | "active" }`
+- `console_dump`: `{ tab_id: number | "active", clear?: boolean }`
 - `reconnect`: `{}`
 - `reset`: `{}`

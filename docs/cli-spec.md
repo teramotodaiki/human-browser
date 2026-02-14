@@ -33,6 +33,26 @@
 - `human-browser keypress <key> [--tab <active|tab_id>]`
 - `human-browser scroll <x> <y> [--tab <active|tab_id>]`
 - `human-browser navigate <url> [--tab <active|tab_id>]`
+- `human-browser open <url> [--tab <active|tab_id>]`
+- `human-browser close [--tab <active|tab_id>]`
+- `human-browser hover <selector|@ref> [--snapshot <snapshot_id>]`
+- `human-browser screenshot [path] [--full] [--tab <active|tab_id>]`
+- `human-browser pdf <path> [--tab <active|tab_id>]`
+- `human-browser eval <javascript> [--tab <active|tab_id>]`
+- `human-browser get text <selector|@ref> [--snapshot <snapshot_id>]`
+- `human-browser get html [selector|@ref] [--snapshot <snapshot_id>]`
+- `human-browser wait <selector|milliseconds> [--timeout <ms>] [--tab <active|tab_id>]`
+- `human-browser wait --text <text> [--timeout <ms>] [--tab <active|tab_id>]`
+- `human-browser wait --url <pattern> [--timeout <ms>] [--tab <active|tab_id>]`
+- `human-browser wait --load <load|domcontentloaded|networkidle> [--timeout <ms>] [--tab <active|tab_id>]`
+- `human-browser wait --fn <expression> [--timeout <ms>] [--tab <active|tab_id>]`
+- `human-browser cookies [get]`
+- `human-browser cookies set <name> <value> [--url <url>]`
+- `human-browser cookies delete <name> [--url <url>]`
+- `human-browser cookies clear`
+- `human-browser network start|stop [--tab <active|tab_id>]`
+- `human-browser network dump|requests [--filter <text>] [--clear] [--tab <active|tab_id>]`
+- `human-browser console [start|stop|dump] [--clear] [--tab <active|tab_id>]`
 - `human-browser reconnect`
   - request bridge reconnect
 - `human-browser reset`

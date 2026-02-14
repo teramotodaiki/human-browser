@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test test/**/*.test.ts",
+    "lint": "node --check src/cli/human-browser.ts && node --check src/daemon/app.ts && node --check src/shared/config.ts && node --check src/shared/errors.ts && node --check src/shared/snapshot.ts && node --check src/shared/types.ts && node --check extension/background.js",
     "daemon": "node src/cli/human-browser.ts daemon",
     "cli": "node src/cli/human-browser.ts",
     "dev": "node src/cli/human-browser.ts daemon"

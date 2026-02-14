@@ -43,6 +43,20 @@ human-browser snapshot
 human-browser snapshot --interactive --cursor --compact --depth 3 --selector '#app'
 human-browser click '#login'
 human-browser fill '#email' hello@example.com
+human-browser open https://example.com
+human-browser hover '#menu'
+human-browser screenshot
+human-browser screenshot page.png --full
+human-browser pdf page.pdf
+human-browser eval 'document.title'
+human-browser get text '#main'
+human-browser get html '#main'
+human-browser wait '#main'
+human-browser cookies
+human-browser cookies set session abc123
+human-browser network start
+human-browser network dump --clear
+human-browser console dump --clear
 # refs (@e1/ref=e1/e1) で操作する場合は --snapshot が必須
 human-browser click @e1 --snapshot <snapshot_id>
 human-browser fill @e2 hello@example.com --snapshot <snapshot_id>

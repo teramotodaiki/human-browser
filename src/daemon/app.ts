@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, extname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { URL } from 'node:url';
 import { HBError, asStructuredError } from '../shared/errors.ts';
@@ -599,6 +602,349 @@ async function executeCommand(
       };
     }
 
+    case 'open': {
+      const url = getStringField(args, 'url');
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(state, 'open', { tab_id: tabId, url }, options);
+      return {
+        tab_id: tabId,
+        url,
+        result,
+      };
+    }
+
+    case 'close': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(state, 'close', { tab_id: tabId }, options);
+      if (typeof state.selectedTabId === 'number' && state.selectedTabId === tabId) {
+        state.selectedTabId = undefined;
+      }
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'hover': {
+      const target = resolveActionTarget(args, 'hover');
+
+      if (target.kind === 'ref') {
+        const snapshotId = getRequiredSnapshotId(args, 'hover');
+        const snapshot = resolveSnapshotForAction(state, {
+          ...args,
+          snapshot_id: snapshotId,
+        });
+        const refData = snapshot.refs[target.ref];
+        if (!refData) {
+          throw new HBError('NO_SUCH_REF', `Ref not found: ${target.ref}`, {
+            ref: target.ref,
+            snapshot_id: snapshot.snapshot_id,
+          }, {
+            next_command: 'human-browser snapshot',
+          });
+        }
+
+        const result = await sendBridgeCommand(
+          state,
+          'hover',
+          {
+            tab_id: snapshot.tab_id,
+            selector: refData.selector,
+          },
+          options,
+        );
+
+        return {
+          snapshot_id: snapshot.snapshot_id,
+          tab_id: snapshot.tab_id,
+          ref: target.ref,
+          selector: refData.selector,
+          result,
+        };
+      }
+
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        'hover',
+        {
+          tab_id: tabId,
+          selector: target.selector,
+        },
+        options,
+      );
+
+      return {
+        tab_id: tabId,
+        selector: target.selector,
+        result,
+      };
+    }
+
+    case 'eval': {
+      const script = getStringField(args, 'script');
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(state, 'eval', { tab_id: tabId, script }, options);
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'text': {
+      const target = resolveReadTarget(state, args, 'text');
+      const result = await sendBridgeCommand(
+        state,
+        'text',
+        {
+          tab_id: target.tabId,
+          selector: target.selector,
+        },
+        options,
+      );
+      return {
+        tab_id: target.tabId,
+        selector: target.selector,
+        result,
+      };
+    }
+
+    case 'html': {
+      const target = resolveReadTarget(state, args, 'html', true);
+      const result = await sendBridgeCommand(
+        state,
+        'html',
+        {
+          tab_id: target.tabId,
+          selector: target.selector,
+        },
+        options,
+      );
+      return {
+        tab_id: target.tabId,
+        selector: target.selector,
+        result,
+      };
+    }
+
+    case 'screenshot': {
+      const tabId = resolveTabForAction(state, args);
+      const fullPage = Boolean(args.full_page);
+      const result = await sendBridgeCommand(
+        state,
+        'screenshot',
+        {
+          tab_id: tabId,
+          full_page: fullPage,
+        },
+        options,
+      );
+      const rawData = result.data_base64;
+      if (typeof rawData !== 'string' || rawData.length === 0) {
+        throw new HBError('EXTENSION_ERROR', 'screenshot result is missing data_base64', { result });
+      }
+      const format = result.format === 'jpeg' ? 'jpeg' : 'png';
+      const requestedPath = typeof args.path === 'string' ? args.path : undefined;
+      const outputPath = requestedPath
+        ? resolveOutputPathWithExt(requestedPath, format === 'jpeg' ? '.jpg' : '.png')
+        : buildAutoScreenshotPath(format);
+      await writeBase64File(outputPath, rawData);
+      return {
+        tab_id: tabId,
+        full_page: fullPage,
+        format,
+        path: outputPath,
+      };
+    }
+
+    case 'pdf': {
+      const tabId = resolveTabForAction(state, args);
+      const path = getStringField(args, 'path');
+      const outputPath = resolveOutputPathWithExt(path, '.pdf');
+      const result = await sendBridgeCommand(
+        state,
+        'pdf',
+        {
+          tab_id: tabId,
+        },
+        options,
+      );
+      const rawData = result.data_base64;
+      if (typeof rawData !== 'string' || rawData.length === 0) {
+        throw new HBError('EXTENSION_ERROR', 'pdf result is missing data_base64', { result });
+      }
+      await writeBase64File(outputPath, rawData);
+      return {
+        tab_id: tabId,
+        path: outputPath,
+      };
+    }
+
+    case 'wait': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        'wait',
+        {
+          tab_id: tabId,
+          ...args,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'cookies_get': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        'cookies_get',
+        {
+          tab_id: tabId,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'cookies_set': {
+      const tabId = resolveTabForAction(state, args);
+      const name = getStringField(args, 'name');
+      const value = getStringField(args, 'value');
+      const url = typeof args.url === 'string' ? args.url : undefined;
+      const result = await sendBridgeCommand(
+        state,
+        'cookies_set',
+        {
+          tab_id: tabId,
+          name,
+          value,
+          url,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        name,
+        result,
+      };
+    }
+
+    case 'cookies_delete': {
+      const tabId = resolveTabForAction(state, args);
+      const name = getStringField(args, 'name');
+      const url = typeof args.url === 'string' ? args.url : undefined;
+      const result = await sendBridgeCommand(
+        state,
+        'cookies_delete',
+        {
+          tab_id: tabId,
+          name,
+          url,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        name,
+        result,
+      };
+    }
+
+    case 'cookies_clear': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        'cookies_clear',
+        {
+          tab_id: tabId,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'network_start':
+    case 'network_stop': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        command,
+        {
+          tab_id: tabId,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'network_dump': {
+      const tabId = resolveTabForAction(state, args);
+      const filter = typeof args.filter === 'string' ? args.filter : undefined;
+      const clear = Boolean(args.clear);
+      const result = await sendBridgeCommand(
+        state,
+        'network_dump',
+        {
+          tab_id: tabId,
+          filter,
+          clear,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'console_start':
+    case 'console_stop': {
+      const tabId = resolveTabForAction(state, args);
+      const result = await sendBridgeCommand(
+        state,
+        command,
+        {
+          tab_id: tabId,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
+    case 'console_dump': {
+      const tabId = resolveTabForAction(state, args);
+      const clear = Boolean(args.clear);
+      const result = await sendBridgeCommand(
+        state,
+        'console_dump',
+        {
+          tab_id: tabId,
+          clear,
+        },
+        options,
+      );
+      return {
+        tab_id: tabId,
+        result,
+      };
+    }
+
     case 'reconnect': {
       if (!state.extensionSocket || state.extensionSocket.readyState !== state.extensionSocket.OPEN) {
         throw new HBError(
@@ -704,7 +1050,7 @@ function resolveTabForAction(state: RuntimeState, args: Record<string, unknown>)
 
 function resolveActionTarget(
   args: Record<string, unknown>,
-  command: 'click' | 'fill',
+  command: 'click' | 'fill' | 'hover',
 ): { kind: 'ref'; ref: string } | { kind: 'selector'; selector: string } {
   const refRaw = typeof args.ref === 'string' ? args.ref : undefined;
   const selectorRaw = typeof args.selector === 'string' ? args.selector : undefined;
@@ -732,7 +1078,7 @@ function resolveActionTarget(
   throw new HBError('BAD_REQUEST', `${command} requires args.ref or args.selector`);
 }
 
-function getRequiredSnapshotId(args: Record<string, unknown>, command: 'click' | 'fill'): string {
+function getRequiredSnapshotId(args: Record<string, unknown>, command: 'click' | 'fill' | 'hover' | 'text' | 'html'): string {
   const snapshotId = args.snapshot_id;
   if (typeof snapshotId !== 'string' || snapshotId.length === 0) {
     throw new HBError('BAD_REQUEST', `${command} with ref requires args.snapshot_id`, undefined, {
@@ -756,6 +1102,102 @@ function parseRefArg(raw: string): string | null {
   }
 
   return null;
+}
+
+function resolveReadTarget(
+  state: RuntimeState,
+  args: Record<string, unknown>,
+  command: 'text' | 'html',
+  allowEmptySelector = false,
+): { tabId: number | 'active'; selector?: string } {
+  const refRaw = typeof args.ref === 'string' ? args.ref : undefined;
+  const selectorRaw = typeof args.selector === 'string' ? args.selector : undefined;
+
+  if (refRaw && selectorRaw) {
+    throw new HBError('BAD_REQUEST', `${command} supports either args.ref or args.selector, not both`);
+  }
+
+  if (refRaw) {
+    const parsedRef = parseRefArg(refRaw);
+    if (!parsedRef) {
+      throw new HBError('BAD_REQUEST', `Invalid ref format for ${command}: ${refRaw}`);
+    }
+    const snapshotId = getRequiredSnapshotId(args, command);
+    const snapshot = resolveSnapshotForAction(state, {
+      ...args,
+      snapshot_id: snapshotId,
+    });
+    const refData = snapshot.refs[parsedRef];
+    if (!refData) {
+      throw new HBError('NO_SUCH_REF', `Ref not found: ${parsedRef}`, {
+        ref: parsedRef,
+        snapshot_id: snapshot.snapshot_id,
+      }, {
+        next_command: 'human-browser snapshot',
+      });
+    }
+    return {
+      tabId: snapshot.tab_id,
+      selector: refData.selector,
+    };
+  }
+
+  if (selectorRaw) {
+    const selectorAsRef = parseRefArg(selectorRaw);
+    if (selectorAsRef) {
+      const snapshotId = getRequiredSnapshotId(args, command);
+      const snapshot = resolveSnapshotForAction(state, {
+        ...args,
+        snapshot_id: snapshotId,
+      });
+      const refData = snapshot.refs[selectorAsRef];
+      if (!refData) {
+        throw new HBError('NO_SUCH_REF', `Ref not found: ${selectorAsRef}`, {
+          ref: selectorAsRef,
+          snapshot_id: snapshot.snapshot_id,
+        }, {
+          next_command: 'human-browser snapshot',
+        });
+      }
+      return {
+        tabId: snapshot.tab_id,
+        selector: refData.selector,
+      };
+    }
+    return {
+      tabId: resolveTabForAction(state, args),
+      selector: selectorRaw,
+    };
+  }
+
+  if (allowEmptySelector) {
+    return {
+      tabId: resolveTabForAction(state, args),
+    };
+  }
+
+  throw new HBError('BAD_REQUEST', `${command} requires args.ref or args.selector`);
+}
+
+function resolveOutputPathWithExt(inputPath: string, fallbackExt: string): string {
+  const absolute = resolve(inputPath);
+  const extension = extname(absolute);
+  if (extension.length > 0) {
+    return absolute;
+  }
+  return `${absolute}${fallbackExt}`;
+}
+
+function buildAutoScreenshotPath(format: 'png' | 'jpeg'): string {
+  const ext = format === 'jpeg' ? 'jpg' : 'png';
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const random = Math.random().toString(36).slice(2, 8);
+  return join(homedir(), '.human-browser', 'tmp', 'screenshots', `screenshot-${timestamp}-${random}.${ext}`);
+}
+
+async function writeBase64File(path: string, base64: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, Buffer.from(base64, 'base64'));
 }
 
 async function sendBridgeCommand(
