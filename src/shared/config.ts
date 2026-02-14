@@ -8,6 +8,14 @@ import type { DaemonConfig } from './types.ts';
 export const DEFAULT_CONFIG_PATH = join(homedir(), '.human-browser', 'config.json');
 const LOOPBACK_HOST = '127.0.0.1';
 
+function newToken(exclude?: string): string {
+  let token = randomUUID().replaceAll('-', '');
+  if (exclude && token === exclude) {
+    token = randomUUID().replaceAll('-', '');
+  }
+  return token;
+}
+
 export function resolveConfigPath(configPath?: string): string {
   return configPath ?? DEFAULT_CONFIG_PATH;
 }
@@ -117,7 +125,7 @@ export async function initConfig(options: {
       port: options.port,
     },
     auth: {
-      token: reusedToken ?? randomUUID().replaceAll('-', ''),
+      token: reusedToken ?? newToken(),
     },
     diagnostics: {
       max_events: options.maxEvents,
@@ -134,6 +142,27 @@ export async function initConfig(options: {
     path: resolved,
     config,
     alreadyExisted: exists,
+  };
+}
+
+export async function rotateConfigToken(configPath?: string): Promise<{ path: string; config: DaemonConfig }> {
+  const resolved = resolveConfigPath(configPath);
+  const existing = await readConfig(configPath);
+  const rotated: DaemonConfig = {
+    ...existing,
+    auth: {
+      ...existing.auth,
+      token: newToken(existing.auth.token),
+    },
+  };
+
+  await mkdir(dirname(resolved), { recursive: true });
+  await writeFile(resolved, `${JSON.stringify(rotated, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await chmod(resolved, 0o600);
+
+  return {
+    path: resolved,
+    config: rotated,
   };
 }
 

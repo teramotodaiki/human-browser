@@ -16,6 +16,9 @@
   - `--force` で再初期化しても既存 token は維持される（daemon との token 不整合防止）
 - `human-browser ws [--show-token]`
   - prints websocket endpoint (`token` is hidden unless `--show-token` is specified)
+- `human-browser rotate-token [--show-token]`
+  - rotates shared token in config
+  - 実行後は daemon再起動と拡張のtoken更新が必要
 - `human-browser daemon`
   - starts local daemon
 - `human-browser status`

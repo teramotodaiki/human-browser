@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { initConfig } from '../../src/shared/config.ts';
+import { initConfig, rotateConfigToken } from '../../src/shared/config.ts';
 
 async function makeTempConfigPath(): Promise<{ dir: string; configPath: string }> {
   const dir = await mkdtemp(join(tmpdir(), 'human-browser-config-'));
@@ -74,4 +74,29 @@ test('init --force regenerates token when existing config token is invalid', asy
   const persistedRaw = await readFile(configPath, 'utf8');
   const persisted = JSON.parse(persistedRaw) as { auth: { token: string } };
   assert.equal(persisted.auth.token, created.config.auth.token);
+});
+
+test('rotateConfigToken rotates token and preserves daemon/diagnostics settings', async (t) => {
+  const { dir, configPath } = await makeTempConfigPath();
+  t.after(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const initial = await initConfig({
+    configPath,
+    host: '127.0.0.1',
+    port: 18765,
+    maxEvents: 500,
+    force: false,
+  });
+
+  const rotated = await rotateConfigToken(configPath);
+  assert.notEqual(rotated.config.auth.token, initial.config.auth.token);
+  assert.equal(rotated.config.daemon.host, initial.config.daemon.host);
+  assert.equal(rotated.config.daemon.port, initial.config.daemon.port);
+  assert.equal(rotated.config.diagnostics.max_events, initial.config.diagnostics.max_events);
+
+  const persistedRaw = await readFile(configPath, 'utf8');
+  const persisted = JSON.parse(persistedRaw) as { auth: { token: string } };
+  assert.equal(persisted.auth.token, rotated.config.auth.token);
 });

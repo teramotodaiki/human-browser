@@ -26,6 +26,7 @@ human-browser daemon
 
 注意:
 - `human-browser init --force` は既存configの token を維持します（稼働中daemonとの token 不整合を避けるため）。
+- token を更新する場合は `human-browser rotate-token --show-token` を使い、daemon再起動と拡張のtoken更新を行ってください。
 
 ## Chrome拡張の読み込み
 
@@ -63,6 +64,7 @@ human-browser fill @e2 hello@example.com --snapshot <snapshot_id>
 human-browser diagnose --limit 20
 # token を表示する場合のみ明示フラグを使う
 human-browser ws --show-token
+human-browser rotate-token --show-token
 ```
 
 `snapshot` はデフォルトで本文コンテキストも含む全体スナップショットを返します。`--interactive` を付けると操作候補のみに絞ります。

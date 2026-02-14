@@ -2,7 +2,7 @@
 
 import { realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { initConfig, readConfig } from '../shared/config.ts';
+import { initConfig, readConfig, rotateConfigToken } from '../shared/config.ts';
 import { HBError, asStructuredError } from '../shared/errors.ts';
 import type { DaemonApiResponse, DaemonConfig, SnapshotOptions, StructuredError } from '../shared/types.ts';
 import { startDaemon } from '../daemon/app.ts';
@@ -102,6 +102,10 @@ async function main(): Promise<void> {
     }
     case 'init': {
       await commandInit(parsed.args, parsed.options);
+      return;
+    }
+    case 'rotate-token': {
+      await commandRotateToken(parsed.args, parsed.options);
       return;
     }
     case 'daemon': {
@@ -263,6 +267,42 @@ async function commandWs(args: string[], options: GlobalOptions): Promise<void> 
   if (data.token_hidden) {
     process.stdout.write('hint: use `human-browser ws --show-token` to print token\n');
   }
+}
+
+async function commandRotateToken(args: string[], options: GlobalOptions): Promise<void> {
+  let showToken = false;
+
+  for (const token of args) {
+    if (token === '--show-token') {
+      // Security default: avoid accidental token leaks in shell history / pasted logs.
+      showToken = true;
+      continue;
+    }
+    throw new HBError('BAD_REQUEST', `Unknown rotate-token option: ${token}`);
+  }
+
+  const { path, config } = await rotateConfigToken(options.configPath);
+  const data = {
+    config_path: path,
+    ws_url: `ws://${config.daemon.host}:${config.daemon.port}/bridge`,
+    token: showToken ? config.auth.token : '[hidden]',
+    token_hidden: !showToken,
+    daemon_restart_required: true,
+  };
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+    return;
+  }
+
+  process.stdout.write(`config_path: ${data.config_path}\n`);
+  process.stdout.write(`ws_url: ${data.ws_url}\n`);
+  process.stdout.write(`token: ${data.token}\n`);
+  process.stdout.write(`daemon_restart_required: ${String(data.daemon_restart_required)}\n`);
+  if (data.token_hidden) {
+    process.stdout.write('hint: use `human-browser rotate-token --show-token` to print token\n');
+  }
+  process.stdout.write('note: restart daemon and update extension token to apply rotation\n');
 }
 
 async function commandDaemonRpc(command: string, args: string[], options: GlobalOptions): Promise<void> {
@@ -1097,6 +1137,7 @@ function printHelp(): void {
       'Commands:',
       '  ws [--show-token]',
       '  init [--host 127.0.0.1] [--port 18765] [--max-events 500] [--force] [--show-token]',
+      '  rotate-token [--show-token]',
       '  daemon',
       '  status',
       '  tabs',
